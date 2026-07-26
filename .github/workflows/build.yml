@@ -8,22 +8,38 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out the code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Gradle 8.4
-        uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.4"
 
       - name: Build debug APK
-        run: gradle assembleDebug
+        run: |
+          set -o pipefail
+          gradle assembleDebug --stacktrace 2>&1 | tee build-log.txt
+
+      - name: Put errors on the summary page
+        if: failure()
+        run: |
+          {
+            echo "## Build errors"
+            echo '```'
+            grep -n -E "^e: |error:|FAILED|FAILURE:|What went wrong|Caused by:" -A 3 build-log.txt | head -120
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload full log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build-log.txt
 
       - name: Upload the APK
         uses: actions/upload-artifact@v4
