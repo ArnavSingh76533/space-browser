@@ -15,6 +15,20 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      - name: Ensure Android SDK
+        run: |
+          if [ -z "${ANDROID_HOME:-}" ] || [ ! -d "${ANDROID_HOME:-/nonexistent}" ]; then
+            export ANDROID_HOME="$HOME/android-sdk"
+            mkdir -p "$ANDROID_HOME/cmdline-tools"
+            curl -sSLo /tmp/tools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+            unzip -q /tmp/tools.zip -d "$ANDROID_HOME/cmdline-tools"
+            mv "$ANDROID_HOME/cmdline-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
+            echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          fi
+          SDK="${ANDROID_HOME:-$HOME/android-sdk}"
+          yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$SDK/cmdline-tools/latest/bin/sdkmanager" --install "platforms;android-34" "build-tools;34.0.0" "platform-tools" > /dev/null
+
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.4"
@@ -24,13 +38,14 @@ jobs:
           set -o pipefail
           gradle assembleDebug --stacktrace 2>&1 | tee build-log.txt
 
-      - name: Put errors on the summary page
+      - name: Put details on the summary page
         if: failure()
         run: |
           {
-            echo "## Build errors"
+            echo "## Build failed — full log"
+            echo "ANDROID_HOME: ${ANDROID_HOME:-<not set>}"
             echo '```'
-            grep -n -E "^e: |error:|FAILED|FAILURE:|What went wrong|Caused by:" -A 3 build-log.txt | head -120
+            tail -c 60000 build-log.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
